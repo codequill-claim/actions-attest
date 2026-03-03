@@ -1,0 +1,43 @@
+name: "CodeQuill — Attest"
+description: "Perform CodeQuill attestation based on external release events."
+author: "CodeQuill"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  token:
+    description: "CodeQuill repo-scoped bearer token."
+    required: true
+  github_id:
+    description: "GitHub repository numeric id. Pass github.repository_id from the workflow."
+    required: true
+  build_path:
+    description: "Path to the build artifact to attest."
+    required: false
+  release_id:
+    description: "CodeQuill release ID to attest against."
+    required: false
+  event_type:
+    description: "The type of event (e.g. release_anchored, release_approved). If not provided, it will be detected from the payload."
+    required: false
+  api_base_url:
+    description: "Override CodeQuill API base URL (optional)."
+    required: false
+    default: ""
+  cli_version:
+    description: "npm version for codequill CLI. Empty = latest."
+    required: false
+    default: ""
+  working_directory:
+    description: "Working directory where CodeQuill runs."
+    required: false
+    default: "."
+  extra_args:
+    description: "Extra args appended to commands (quotes supported)."
+    required: false
+    default: ""
+
+runs:
+  using: "node20"
+  main: "dist/index.js"
