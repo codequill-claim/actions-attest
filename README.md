@@ -3,7 +3,6 @@
 This GitHub Action automates the CodeQuill attestation process, triggered by external release events via GitHub Issues. 
 
 ## Features
-
 - Installs the CodeQuill CLI automatically.
 - Handles `release_anchored` and `release_approved` events via Issue payloads.
 - Verified by HMAC-SHA256 signature for security.
@@ -27,12 +26,12 @@ name: CodeQuill Attestation
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [labeled]
 
 jobs:
   handle_release:
-    # Optional: basic filtering at the job level
-    if: github.event.issue.user.type == 'Bot' && contains(github.event.issue.labels.*.name, 'CodeQuill Release')
+    # Basic filtering at the job level
+    if: github.event.issue.user.login == 'codequill-authorship[bot]' && github.event.label.name == 'codequill:release'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -41,11 +40,13 @@ jobs:
       - name: CodeQuill Attestation
         id: codequill # Required to access outputs
         uses: codequill-claim/actions-attest@v1
+        env:
+           GITHUB_TOKEN: ${{ github.token }} # Required to automatically close issues (optional)
         with:
           token: ${{ secrets.CODEQUILL_TOKEN }}
           hmac_secret: ${{ secrets.CODEQUILL_HMAC_SECRET }}
           github_id: ${{ github.repository_id }}
-          build_path: "./dist"
+          build_path: "./dist/test.tar.gz"
 
       - name: Build and Deploy
         if: steps.codequill.outputs.event_type == 'release_anchored'
@@ -61,7 +62,7 @@ The bot should create an issue with the label `CodeQuill Release`. The body must
 
 ```json
 {
-  "payload": "{\"event\": \"release_approved\", \"release_id\": \"CQ-123\"}",
+  "payload": "{\"event\": \"release_approved\", \"release_id\": \"8b87c486-7fe1-4eda-a8cd-51b72991c44a\"}",
   "signature": "..."
 }
 ```
