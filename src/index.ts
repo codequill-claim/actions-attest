@@ -171,9 +171,6 @@ async function run() {
         }
 
         if (eventType === "release_approved" || !eventType || (github.context.eventName !== "repository_dispatch" && github.context.eventName !== "issues")) {
-            // If it's release_approved or if we are not in a dispatch/issue event (e.g. manual run)
-            // We should have buildPath and releaseId
-            
             if (!buildPath || !releaseId) {
                 if (eventType === "release_approved") {
                     throw new Error("release_approved event requires both build_path and release_id inputs.");
