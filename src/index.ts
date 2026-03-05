@@ -3,6 +3,7 @@ import * as exec from "@actions/exec";
 import * as github from "@actions/github";
 import * as path from "node:path";
 import * as fs from "node:fs";
+import * as crypto from "node:crypto";
 import stringArgv from "string-argv";
 
 function req(name: string): string {
@@ -34,18 +35,80 @@ async function run() {
     try {
         const token = req("token");
         const githubId = req("github_id");
+        const hmacSecret = opt("hmac_secret", "");
         const apiBase = opt("api_base_url", "");
         const cliVersion = opt("cli_version", "");
         const wd = opt("working_directory", ".");
         const extraArgs = opt("extra_args", "");
         const extra = extraArgs ? stringArgv(extraArgs) : [];
         
-        // Attestation specific inputs
-        const buildPath = opt("build_path", "");
-        const releaseId = opt("release_id", "");
+        // Default inputs
+        let buildPath = opt("build_path", "");
+        let releaseId = opt("release_id", "");
+        let eventType = opt("event_type", "");
+
+        // Handle Issue event
+        if (github.context.eventName === "issues") {
+            const issue = github.context.payload.issue;
+            if (!issue) throw new Error("No issue found in context.");
+
+            // Check if the source is a bot
+            if (issue.user?.type !== "Bot") {
+                core.info(`Skipping issue: not created by a bot (user type: ${issue.user?.type}).`);
+                return;
+            }
+
+            // Check for the "CodeQuill Release" label
+            const labels: any[] = issue.labels || [];
+            const hasLabel = labels.some((l: any) => l.name === "CodeQuill Release");
+            if (!hasLabel) {
+                core.info(`Skipping issue: "CodeQuill Release" label not found.`);
+                return;
+            }
+
+            // Parse body
+            const body = (issue.body || "").trim();
+            if (!body) throw new Error("Issue body is empty.");
+
+            try {
+                const data = JSON.parse(body);
+                let payloadObj = data;
+
+                // Verify HMAC if secret is provided
+                if (hmacSecret) {
+                    if (!data.signature) throw new Error("Issue payload is missing signature.");
+                    if (!data.payload) throw new Error("Issue payload is missing 'payload' field.");
+                    
+                    const payloadStr = typeof data.payload === "string" ? data.payload : JSON.stringify(data.payload);
+                    const hmac = crypto.createHmac("sha256", hmacSecret);
+                    hmac.update(payloadStr);
+                    const expected = hmac.digest("hex");
+                    
+                    if (expected !== data.signature) {
+                        throw new Error("HMAC signature verification failed.");
+                    }
+                    
+                    payloadObj = typeof data.payload === "string" ? JSON.parse(data.payload) : data.payload;
+                } else {
+                    core.warning("hmac_secret not provided. Skipping signature verification.");
+                    if (data.payload) payloadObj = typeof data.payload === "string" ? JSON.parse(data.payload) : data.payload;
+                }
+
+                eventType = payloadObj.event || eventType;
+                releaseId = payloadObj.release_id || releaseId;
+            } catch (e: any) {
+                throw new Error(`Failed to parse issue body as JSON or verify signature: ${e.message}`);
+            }
+        }
         
-        // Optional event type override, otherwise check github context
-        const eventType = opt("event_type", github.context.payload?.action || github.context.eventName);
+        // Fallback for event type detection
+        if (!eventType) {
+            eventType = opt("event_type", github.context.payload?.action || github.context.eventName);
+        }
+
+        // Set outputs
+        core.setOutput("event_type", eventType);
+        core.setOutput("release_id", releaseId);
 
         const wdAbs = path.resolve(process.cwd(), wd);
         ensureDir(wdAbs);
@@ -59,8 +122,8 @@ async function run() {
             return;
         }
 
-        if (eventType === "release_approved" || !eventType || github.context.eventName !== "repository_dispatch") {
-            // If it's release_approved or if we are not in repository_dispatch (e.g. manual run)
+        if (eventType === "release_approved" || !eventType || (github.context.eventName !== "repository_dispatch" && github.context.eventName !== "issues")) {
+            // If it's release_approved or if we are not in a dispatch/issue event (e.g. manual run)
             // We should have buildPath and releaseId
             
             if (!buildPath || !releaseId) {

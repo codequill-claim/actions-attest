@@ -12,11 +12,14 @@ inputs:
   github_id:
     description: "GitHub repository numeric id. Pass github.repository_id from the workflow."
     required: true
+  hmac_secret:
+    description: "Shared secret for HMAC-SHA256 verification of the issue payload."
+    required: false
   build_path:
     description: "Path to the build artifact to attest."
     required: false
   release_id:
-    description: "CodeQuill release ID to attest against."
+    description: "CodeQuill release ID to attest against. If not provided, it will be extracted from the issue payload."
     required: false
   event_type:
     description: "The type of event (e.g. release_anchored, release_approved). If not provided, it will be detected from the payload."
@@ -37,6 +40,12 @@ inputs:
     description: "Extra args appended to commands (quotes supported)."
     required: false
     default: ""
+
+outputs:
+  event_type:
+    description: "The detected event type (e.g., release_anchored, release_approved)."
+  release_id:
+    description: "The CodeQuill release ID."
 
 runs:
   using: "node20"
