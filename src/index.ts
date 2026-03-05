@@ -31,6 +31,44 @@ async function runCli(args: string[], env: Record<string,string>) {
     return await exec.getExecOutput("codequill", args, { env: { ...process.env, ...env } as Record<string, string> });
 }
 
+async function closeIssueWithComment(params: {
+    comment?: string;
+    state?: "open" | "closed";
+}) {
+    if (github.context.eventName !== "issues") return;
+
+    const issue = github.context.payload.issue;
+    if (!issue) return;
+
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    if (!token) {
+        core.warning("No GITHUB_TOKEN available; cannot comment/close issue.");
+        return;
+    }
+
+    const octokit = github.getOctokit(token);
+    const { owner, repo } = github.context.repo;
+    const issue_number = issue.number;
+
+    if (params.comment) {
+        await octokit.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number,
+            body: params.comment,
+        });
+    }
+
+    if (params.state) {
+        await octokit.rest.issues.update({
+            owner,
+            repo,
+            issue_number,
+            state: params.state,
+        });
+    }
+}
+
 async function run() {
     try {
         const token = req("token");
@@ -60,7 +98,7 @@ async function run() {
 
             // Check for the "CodeQuill Release" label
             const labels: any[] = issue.labels || [];
-            const hasLabel = labels.some((l: any) => l.name === "CodeQuill Release");
+            const hasLabel = labels.some((l: any) => l.name === "codequill:release");
             if (!hasLabel) {
                 core.info(`Skipping issue: "CodeQuill Release" label not found.`);
                 return;
@@ -170,9 +208,19 @@ async function run() {
             core.info(`Event type ${eventType} is not handled by this action.`);
         }
 
+        await closeIssueWithComment({
+            comment: "✅ CodeQuill job processed.",
+            state: "closed",
+        });
         core.info("Done.");
     } catch (e: any) {
-        core.setFailed(e?.message ? String(e.message) : String(e));
+        const msg = e?.message ? String(e.message) : String(e);
+        core.setFailed(msg);
+        try {
+            await closeIssueWithComment({ comment: `❌ CodeQuill job failed: ${msg}` });
+        } catch (err: any) {
+            core.warning(`Unable to comment on issue: ${err?.message ?? String(err)}`);
+        }
     }
 }
 
