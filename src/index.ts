@@ -163,6 +163,10 @@ async function run() {
         if (eventType === "release_anchored") {
             core.info("Release anchored event received. No attestation required at this stage.");
             core.info("User can proceed with build and deployment.");
+            await closeIssueWithComment({
+                comment: "✅ CodeQuill job processed.",
+                state: "closed",
+            });
             return;
         }
 
