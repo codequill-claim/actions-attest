@@ -90,17 +90,23 @@ async function run() {
             const issue = github.context.payload.issue;
             if (!issue) throw new Error("No issue found in context.");
 
-            // Check if the source is a bot
-            if (issue.user?.type !== "Bot") {
-                core.info(`Skipping issue: not created by a bot (user type: ${issue.user?.type}).`);
+            core.info(`Issues action: ${(github.context.payload as any).action}`);
+            core.info(`Issue by: ${issue.user?.login} (${issue.user?.type})`);
+
+            // Enforce bot login (stronger than type === "Bot")
+            const botLogin = "codequill-authorship[bot]";
+            const login = String(issue.user?.login || "");
+            if (login !== botLogin) {
+                core.info(`Skipping issue: not created by expected bot (${login}).`);
                 return;
             }
 
-            // Check for the "CodeQuill Release" label
-            const labels: any[] = issue.labels || [];
-            const hasLabel = labels.some((l: any) => l.name === "codequill:release");
-            if (!hasLabel) {
-                core.info(`Skipping issue: "CodeQuill Release" label not found.`);
+            // Use the label from the event payload (reliable for issues.labeled)
+            const evLabel = (github.context.payload as any).label?.name;
+            core.info(`Issue label event: ${evLabel}`);
+
+            if (evLabel !== "codequill:release") {
+                core.info(`Skipping issue: label event is not codequill:release (${evLabel}).`);
                 return;
             }
 
